@@ -5,7 +5,7 @@
 package test.tests.hashers
 
 import app.api.MockApi
-import app.extractors.ExtractorInterface
+import app.extractors.Extractor
 import app.hashers.CommitHasher
 import app.hashers.CommitCrawler
 import app.model.*
@@ -136,129 +136,18 @@ class CommitHasherTest : Spek({
         }
     }
 
-    /*given("happy path: added a few new commits") {
-        repo.commits = listOf(getLastCommit(git))
-
-        val errors = mutableListOf<Throwable>()
-        val mockApi = MockApi(mockRepo = repo)
-
-        val otherAuthorsNames = listOf("a", "b", "a")
-        val otherAuthorsEmails = listOf("a@a", "b@b", "a@a")
-        for (i in 0..2) {
-            git.commit().setMessage("Create $i.")
-                        .setAuthor(otherAuthorsNames.get(i),
-                                   otherAuthorsEmails.get(i))
-                        .call()
-        }
-        val authorCommits = mutableListOf<Commit>()
-        for (i in 0..4) {
-            val message = "Created $i by author."
-            val revCommit = git.commit().setMessage(message).call()
-            authorCommits.add(Commit(revCommit))
-        }
-        val observable = CommitCrawler.getObservable(gitHasher, repo)
-        CommitHasher(repo, mockApi, repo.commits.map {it.rehash}, emails)
-            .updateFromObservable(observable, { e -> errors.add(e) })
-
-        it ("has no errors") {
-            assertEquals(0, errors.size)
-        }
-
-        it("posts five commits as added") {
-            assertEquals(5, mockApi.receivedAddedCommits.size)
-        }
-
-        it("doesn't send deleted commits ") {
-            assertEquals(0, mockApi.receivedDeletedCommits.size)
-        }
-
-        it("processes author's commits") {
-            assertEquals(authorCommits.asReversed(),
-                         mockApi.receivedAddedCommits)
-        }
-    }
-
-    given("fork event") {
-        val forkedRepoPath = "./forked_repo/"
-        val originalRepoPath = "./original_repo/"
-        val forked = Git.cloneRepository()
-                .setURI("https://github.com/yaronskaya/sourcerer-app.git")
-                .setDirectory(File(forkedRepoPath))
-                .call()
-        val original = Git.cloneRepository()
-                .setURI("https://github.com/sourcerer-io/sourcerer-app.git")
-                .setDirectory(File(originalRepoPath))
-                .call()
-        val forkedLocalRepo = LocalRepo(forkedRepoPath)
-        val originalLocalRepo = LocalRepo(originalRepoPath)
-
-        val forkedRepoRehash = getRepoRehash(forked, forkedLocalRepo)
-        val originalRepoRehash = getRepoRehash(original, originalLocalRepo)
-
-        it("assigns different hashes for the original and the forked repos") {
-            assertNotEquals(originalRepoRehash, forkedRepoRehash)
-        }
-
-        forked.repository.close()
-        forked.close()
-        original.repository.close()
-        original.close()
-    }
-
-    given("lost server") {
-        repo.commits = listOf(getLastCommit(git))
-
-        val errors = mutableListOf<Throwable>()
-        val mockApi = MockApi(mockRepo = repo)
-
-        // Add some commits.
-        val addedCommits = mutableListOf<Commit>()
-        for (i in 0..3) {
-            val message = "Created $i by author."
-            val revCommit = git.commit().setMessage(message).call()
-            addedCommits.add(Commit(revCommit))
-        }
-
-        // Remove one commit from server history.
-        val removedCommit = addedCommits.removeAt(1)
-        repo.commits = addedCommits.toList().asReversed()
-
-        val observable = CommitCrawler.getObservable(gitHasher, repo)
-        CommitHasher(repo, mockApi, repo.commits.map {it.rehash}, emails)
-            .updateFromObservable(observable, { e -> errors.add(e) })
-
-        it ("has no errors") {
-            assertEquals(0, errors.size)
-        }
-
-        it("adds posts one commit as added and received commit is lost one") {
-            assertEquals(1, mockApi.receivedAddedCommits.size)
-            assertEquals(removedCommit, mockApi.receivedAddedCommits.last())
-        }
-
-        it("doesn't posts deleted commits") {
-            assertEquals(0, mockApi.receivedDeletedCommits.size)
-        }
-    }*/
-
-    given("commits with syntax stats") {
-
-        val lines = listOf("x = [i**2 for i in range(9999)]", "def fn()", "x " +
-                "= 1",
-                "x = map(lambda x: x**2, range(9999))",
-                "x = map(lambda x: x**2, map(lambda x: x**3, range(10))",
-                "x = map(lambda x: x**2, range(10))," +
-                        "map(lambda x: x**3, range(10)))")
+    given("commits with language stats") {
+        val lines = listOf("x = 1", "y = 2")
 
         val author = Author(userName, userEmail)
 
-        val testRepoPath = "../testrepo-commit-hasher-"
-        val testRepo = TestRepo(testRepoPath + "python-facts")
+        val testRepoPath = "../testrepo-commit-hasher-lang-stats"
+        val testRepo = TestRepo(testRepoPath)
 
         val mockApi = MockApi(mockRepo = repo)
         val observable = CommitCrawler.getObservable(testRepo.git, repo)
 
-        it("sends stats") {
+        it("sends language stats for python files") {
             for (i in 0..lines.size - 1) {
                 val line = lines[i]
                 val fileName = "file$i.py"
@@ -267,7 +156,6 @@ class CommitHasherTest : Spek({
             }
 
             val errors = mutableListOf<Throwable>()
-
             val rehashes = (0..lines.size - 1).map { "r$it" }
 
             CommitHasher(repo, mockApi, rehashes, emails)
@@ -275,151 +163,15 @@ class CommitHasherTest : Spek({
 
             assertEquals(0, errors.size)
 
-            val syntaxStats = mockApi.receivedAddedCommits
+            val languageStats = mockApi.receivedAddedCommits
                 .fold(mutableListOf<CommitStats>()) { allStats, commit ->
                     allStats.addAll(commit.stats)
                     allStats
-                }.filter { it.type == ExtractorInterface.TYPE_SYNTAX }
+                }.filter { it.type == Extractor.TYPE_LANGUAGE }
 
-            val mapStats = syntaxStats.filter { it.tech == "python>map" }
-            val listStats = syntaxStats.filter { it.tech == "python>list" }
-            assertEquals(3, mapStats.size)
-            assertEquals(1, listStats.size)
-            assertEquals(5, mapStats.map { it.numLinesAdded }.sum())
-            assertEquals(0, mapStats.map { it.numLinesDeleted }.sum())
-
-            assertEquals(1, listStats.map { it.numLinesAdded }.sum())
-            assertEquals(0, listStats.map { it.numLinesDeleted }.sum())
-        }
-
-        afterGroup {
-            testRepo.destroy()
-        }
-    }
-
-    given("cpp repo") {
-        val testRepo = TestRepo("../testrepo-commit-hasher-cpp-stats")
-        val lines = listOf("#include <iostream>",
-                "template <typename s, Input... inputs>",
-                "struct Play<s, x, xs...> {",
-                "    using type = cons<s, play<step_t<x, s>, xs...>>;", "};",
-                "        template<typename x>")
-
-        val author = Author(userName, userEmail)
-
-        val mockApi = MockApi(mockRepo = repo)
-        val observable = CommitCrawler.getObservable(testRepo.git, repo)
-
-        it("sends stats") {
-            for (i in 0..lines.size - 1) {
-                val line = lines[i]
-                val fileName = "file$i.cpp"
-                testRepo.createFile(fileName, listOf(line))
-                testRepo.commit(message = "$line in $fileName", author = author)
-            }
-
-            val errors = mutableListOf<Throwable>()
-
-            val rehashes = (0..lines.size - 1).map { "r$it" }
-
-            CommitHasher(repo, mockApi, rehashes, emails)
-                    .updateFromObservable(observable, { e -> errors.add(e) })
-
-            assertEquals(0, errors.size)
-
-            val syntaxStats = mockApi.receivedAddedCommits
-                    .fold(mutableListOf<CommitStats>()) { allStats, commit ->
-                        allStats.addAll(commit.stats)
-                        allStats
-                    }.filter { it.type == ExtractorInterface.TYPE_SYNTAX }
-
-            val templateStats = syntaxStats.filter { it.tech == "cpp>template" }
-            assertEquals(2, templateStats.size)
-            assertEquals(2, templateStats.map { it.numLinesAdded }.sum())
-            assertEquals(0, templateStats.map { it.numLinesDeleted }.sum())
-        }
-
-    }
-    given("commits with svelte files") {
-        val lines = listOf("line 1", "line 2")
-
-        val author = Author(userName, userEmail)
-
-        val testRepoPath = "../testrepo-extractor-"
-        val testRepo = TestRepo(testRepoPath + "svelte")
-
-        val mockApi = MockApi(mockRepo = repo)
-        val observable = CommitCrawler.getObservable(testRepo.git, repo)
-
-        it("sends stats") {
-            for (i in 0..lines.size - 1) {
-                val line = lines[i]
-                val fileName = "file$i.svelte"
-                testRepo.createFile(fileName, listOf(line))
-                testRepo.commit(message = "$line in $fileName", author = author)
-            }
-
-            val errors = mutableListOf<Throwable>()
-
-            val rehashes = (0..lines.size - 1).map { "r$it" }
-
-            CommitHasher(repo, mockApi, rehashes, emails)
-                    .updateFromObservable(observable, { e -> errors.add(e) })
-
-            assertEquals(0, errors.size)
-
-            val syntaxStats = mockApi.receivedAddedCommits
-                    .fold(mutableListOf<CommitStats>()) { allStats, commit ->
-                        allStats.addAll(commit.stats)
-                        allStats
-                    }.filter { it.type == ExtractorInterface.TYPE_LIBRARY }
-
-            val svelteStats = syntaxStats.filter { it.tech == "js.svelte" }
-            assertEquals(2, svelteStats.size)
-            assertEquals(2, svelteStats.map { it.numLinesAdded }.sum())
-            assertEquals(0, svelteStats.map { it.numLinesDeleted }.sum())
-        }
-
-        afterGroup {
-            testRepo.destroy()
-        }
-    }
-
-    given("commits with quasar files") {
-        val lines = listOf("module.exports = function (ctx) { }")
-
-        val author = Author(userName, userEmail)
-
-        val testRepoPath = "../testrepo-extractor-"
-        val testRepo = TestRepo(testRepoPath + "quasar")
-
-        val mockApi = MockApi(mockRepo = repo)
-        val observable = CommitCrawler.getObservable(testRepo.git, repo)
-
-        it("sends stats") {
-            val fileName = "quasar.conf.js"
-            testRepo.createFile(fileName, lines)
-            testRepo.commit(message = "add quasar config", author = author)
-
-            val errors = mutableListOf<Throwable>()
-
-            val rehashes = (0..lines.size - 1).map { "r$it" }
-
-            CommitHasher(repo, mockApi, rehashes, emails)
-                    .updateFromObservable(observable, { e -> errors.add(e) })
-
-            assertEquals(0, errors.size)
-
-            val syntaxStats = mockApi.receivedAddedCommits
-                    .fold(mutableListOf<CommitStats>()) { allStats, commit ->
-                        allStats.addAll(commit.stats)
-                        allStats
-                    }.filter { it.type == ExtractorInterface.TYPE_LIBRARY }
-
-            val quasarStats = syntaxStats.filter { it.tech == "js.quasar" }
-            assertEquals(1, quasarStats.size)
-            assertEquals(1, quasarStats.map { it.numLinesAdded }.sum())
-            assertEquals(0, quasarStats.map { it.numLinesDeleted }.sum())
+            val pythonStats = languageStats.filter { it.tech == "python" }
+            assertEquals(2, pythonStats.size)
+            assertEquals(2, pythonStats.map { it.numLinesAdded }.sum())
         }
 
         afterGroup {
@@ -428,17 +180,17 @@ class CommitHasherTest : Spek({
     }
 
     given("commits with typescript files") {
-        val lines = listOf("new Vue({", "line 2")
+        val lines = listOf("const x = 1;", "const y = 2;")
 
         val author = Author(userName, userEmail)
 
-        val testRepoPath = "../testrepo-extractor-"
-        val testRepo = TestRepo(testRepoPath + "typescript")
+        val testRepoPath = "../testrepo-commit-hasher-typescript"
+        val testRepo = TestRepo(testRepoPath)
 
         val mockApi = MockApi(mockRepo = repo)
         val observable = CommitCrawler.getObservable(testRepo.git, repo)
 
-        it("sends stats") {
+        it("sends language stats for typescript") {
             for (i in 0..lines.size - 1) {
                 val line = lines[i]
                 val fileName = "file$i.ts"
@@ -447,7 +199,6 @@ class CommitHasherTest : Spek({
             }
 
             val errors = mutableListOf<Throwable>()
-
             val rehashes = (0..lines.size - 1).map { "r$it" }
 
             CommitHasher(repo, mockApi, rehashes, emails)
@@ -460,63 +211,11 @@ class CommitHasherTest : Spek({
                         allStats.addAll(commit.stats)
                         allStats
                     }
-            val languageStats = stats.filter { it.type == ExtractorInterface.TYPE_LANGUAGE }
-            val techStats = stats.filter { it.type == ExtractorInterface.TYPE_LIBRARY }
+            val languageStats = stats.filter { it.type == Extractor.TYPE_LANGUAGE }
             assertEquals(2, languageStats.size)
             languageStats.forEach { stat ->
                 assertEquals("typescript", stat.tech)
             }
-            assertEquals(1, techStats.map { it.numLinesAdded }.sum())
-            techStats.forEach { stat ->
-                assertEquals("js.vue", stat.tech)
-            }
-        }
-
-        afterGroup {
-            testRepo.destroy()
-        }
-    }
-
-    given("commits with scss stats") {
-
-        val lines = listOf("first line in css file", "",
-                "third line in css file")
-
-        val author = Author(userName, userEmail)
-
-        val testRepoPath = "../testrepo-extractor-"
-        val testRepo = TestRepo(testRepoPath + "css")
-
-        val mockApi = MockApi(mockRepo = repo)
-        val observable = CommitCrawler.getObservable(testRepo.git, repo)
-
-        it("sends stats") {
-            for (i in 0..lines.size - 1) {
-                val line = lines[i]
-                val fileName = "file$i.scss"
-                testRepo.createFile(fileName, listOf(line))
-                testRepo.commit(message = "$line in $fileName", author = author)
-            }
-
-            val errors = mutableListOf<Throwable>()
-
-            val rehashes = (0..lines.size - 1).map { "r$it" }
-
-            CommitHasher(repo, mockApi, rehashes, emails)
-                    .updateFromObservable(observable, { e -> errors.add(e) })
-
-            assertEquals(0, errors.size)
-
-            val syntaxStats = mockApi.receivedAddedCommits
-                    .fold(mutableListOf<CommitStats>()) { allStats, commit ->
-                        allStats.addAll(commit.stats)
-                        allStats
-                    }.filter { it.type == ExtractorInterface.TYPE_LIBRARY }
-
-            val scssStats = syntaxStats.filter { it.tech == "scss" }
-            assertEquals(2, scssStats.size)
-            assertEquals(2, scssStats.map { it.numLinesAdded }.sum())
-            assertEquals(0, scssStats.map { it.numLinesDeleted }.sum())
         }
 
         afterGroup {

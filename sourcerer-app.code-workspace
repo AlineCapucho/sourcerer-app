@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../sourcerer-app-ddd"
+		},
+		{
+			"path": "../sourcerer-app-hex"
+		}
+	],
+	"settings": {}
+}

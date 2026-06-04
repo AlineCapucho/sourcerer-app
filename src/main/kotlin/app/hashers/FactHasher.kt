@@ -9,6 +9,7 @@ import app.Logger
 import app.api.Api
 import app.extractors.Extractor
 import app.model.Author
+
 import app.model.Commit
 import app.model.Fact
 import app.model.Repo
