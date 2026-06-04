@@ -4,7 +4,7 @@
 package test.tests.hashers
 
 import app.api.MockApi
-import app.extractors.ExtractorInterface
+import app.extractors.Extractor
 import app.hashers.CommitHasher
 import app.hashers.CommitCrawler
 import app.model.*
@@ -25,12 +25,9 @@ class IgnorePathsTest : Spek({
     // Creation of test repo.
     cleanRepos()
 
-    given("commits with syntax stats") {
-        val lines = listOf("x = [i**2 for i range(9999)]", "def fn()", "x = 1",
-                "x = map(lambda x: x**2, range(9999))",
-                "x = map(lambda x: x**2, map(lambda x: x**3, range(10))",
-                "x = map(lambda x: x**2, range(10))," +
-                        "map(lambda x: x**3, range(10)))")
+    given("commits with ignored paths") {
+        val lines = listOf("x = 1", "y = 2", "z = 3",
+                "a = 4", "b = 5", "c = 6")
 
         val author = Author(userName, userEmail)
         val emails = hashSetOf(userEmail)
@@ -44,7 +41,7 @@ class IgnorePathsTest : Spek({
         val mockApi = MockApi(mockRepo = serverRepo)
         val observable = CommitCrawler.getObservable(testRepo.git, serverRepo)
 
-        it("t1") {
+        it("ignores files specified in .sourcerer-conf") {
             testRepo.createFile("test.py", lines)
             testRepo.commit(message = "commit1", author = author)
 
@@ -74,16 +71,16 @@ class IgnorePathsTest : Spek({
             }
             assertEquals(0, errors.size)
 
-            val syntaxStats = mockApi.receivedAddedCommits
+            val languageStats = mockApi.receivedAddedCommits
                 .fold(mutableListOf<CommitStats>()) { allStats, commit ->
                     allStats.addAll(commit.stats)
                     allStats
-                }.filter { it.type == ExtractorInterface.TYPE_SYNTAX }
+                }.filter { it.type == Extractor.TYPE_LANGUAGE }
 
-            val mapStats = syntaxStats.filter { it.tech == "python>map" }
-            assertEquals(1, mapStats.size)
-            assertEquals(5, mapStats.map { it.numLinesAdded }.sum())
-            assertEquals(0, mapStats.map { it.numLinesDeleted }.sum())
+            // Only test.py should contribute stats (ignore.py is ignored)
+            val pythonStats = languageStats.filter { it.tech == "python" }
+            assertEquals(1, pythonStats.size)
+            assertEquals(lines.size, pythonStats.map { it.numLinesAdded }.sum())
         }
 
         afterGroup {

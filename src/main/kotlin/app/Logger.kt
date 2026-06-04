@@ -82,13 +82,9 @@ object Logger {
             if (SENTRY_ENABLED) {
                 sentryContext?.user = UserBuilder().setUsername(value).build()
             }
-            Analytics.username = value ?: ""
         }
 
     var uuid: String? = null
-        set(value) {
-            Analytics.uuid = value ?: ""
-        }
 
     init {
         if (SENTRY_ENABLED) {
@@ -176,7 +172,6 @@ object Logger {
             }
         }
         if (!logOnly) {
-            Analytics.trackError(e)
             capture(e)
         }
         addBreadcrumb(finalMessage, Breadcrumb.Level.ERROR)
@@ -200,9 +195,6 @@ object Logger {
         val msg = message()
         if (LEVEL >= INFO) {
             println("[i] $msg.")
-        }
-        if (event.isNotBlank()) {
-            Analytics.trackEvent(event)
         }
         addBreadcrumb(msg, Breadcrumb.Level.INFO)
     }
